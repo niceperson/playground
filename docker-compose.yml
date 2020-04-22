@@ -1,0 +1,110 @@
+version: '3.7'
+
+volumes:
+  letsencrypt:
+    external: true
+
+services:
+  traefik:
+    # restart policy
+    restart: unless-stopped
+    # The official v2 Traefik docker image
+    image: traefik:v2.2
+    command:
+      - "--api.insecure=true" # Enables the web UI
+      - "--providers.docker=true" # Tells Traefik to listen to docker
+      - "--providers.docker.network=playground_default" # use this network
+      - "--providers.docker.exposedByDefault=false" # will not discover
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.websecure.address=:443"
+      - "--certificatesResolvers.le.acme.email=${ACME_EMAIL}"
+      - "--certificatesResolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesResolvers.le.acme.tlsChallenge=true"
+      - "--certificatesResolvers.le.acme.httpChallenge=true"
+      - "--certificatesResolvers.le.acme.httpChallenge.entryPoint=web"
+    ports:
+      # The HTTP port
+      - "80:80"
+      # The HTTPS port
+      - "443:443"
+      # The Web UI (enabled by --api.insecure=true)
+      - "8080:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+      - letsencrypt:/letsencrypt/
+    labels:
+      # Redirect all HTTP to HTTPS permanently
+      - traefik.http.routers.http_catchall.rule=HostRegexp(`{any:.+}`)
+      - traefik.http.routers.http_catchall.entrypoints=web
+      - traefik.http.routers.http_catchall.middlewares=https_redirect
+      - traefik.http.middlewares.https_redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.https_redirect.redirectscheme.permanent=true
+
+  whoami:
+    image: "containous/whoami"
+    container_name: "simple-service"
+    restart: unless-stopped
+    labels:
+      - traefik.http.routers.whoami.rule=Host(`whoami.localhost`)
+      - traefik.http.routers.whoami.tls=true
+      - traefik.http.routers.whoami.tls.certresolver=le
+
+  mysql:
+    restart: unless-stopped
+    build:
+      context: ./mysql
+      args:
+        - MYSQL_DATABASE=${MYSQL_DATABASE}
+        - MYSQL_USER=${MYSQL_USER}
+        - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+        - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    expose:
+      - "3306"
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./data/mysql/:/var/lib/mysql
+
+  postgresql:
+    restart: unless-stopped
+    build:
+      context: ./postgresql
+      args:
+        - POSTGRES_USER=${POSTGRES_USER}
+        - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        - POSTGRES_DB=${POSTGRES_DB}
+    expose:
+      - "5432"
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgresql/:/var/lib/postgresql
+
+  mongo:
+    restart: unless-stopped
+    build:
+      context: ./mongo
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongo/:/var/lib/mongodb
+
+  redis:
+    restart: unless-stopped
+    build:
+      context: ./redis
+    expose:
+      - "6379"
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+
+  memcached:
+    restart: unless-stopped
+    image: memcached
+    ports:
+      - "11211:11211"
