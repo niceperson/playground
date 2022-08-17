@@ -1,4 +1,4 @@
-version: '3.7'
+version: "3.7"
 
 volumes:
   letsencrypt:
@@ -9,7 +9,8 @@ services:
     # restart policy
     restart: unless-stopped
     # The official v2 Traefik docker image
-    image: traefik:v2.2
+    build:
+      context: ./traefik
     command:
       - "--api.insecure=true" # Enables the web UI
       - "--providers.docker=true" # Tells Traefik to listen to docker
@@ -41,30 +42,24 @@ services:
       - traefik.http.middlewares.https_redirect.redirectscheme.scheme=https
       - traefik.http.middlewares.https_redirect.redirectscheme.permanent=true
 
-  whoami:
-    image: "containous/whoami"
-    container_name: "simple-service"
-    restart: unless-stopped
-    labels:
-      - traefik.http.routers.whoami.rule=Host(`whoami.localhost`)
-      - traefik.http.routers.whoami.tls=true
-      - traefik.http.routers.whoami.tls.certresolver=le
-
   mysql:
     restart: unless-stopped
     build:
       context: ./mysql
       args:
-        - MYSQL_DATABASE=${MYSQL_DATABASE}
-        - MYSQL_USER=${MYSQL_USER}
-        - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-        - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+        - MYSQL_VERSION=${MYSQL_VERSION}
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
     expose:
       - "3306"
     ports:
       - "3306:3306"
     volumes:
       - ./data/mysql/:/var/lib/mysql
+      - ${MYSQL_ENTRYPOINT_INITDB}:/docker-entrypoint-initdb.d
 
   postgresql:
     restart: unless-stopped
@@ -108,3 +103,12 @@ services:
     image: memcached
     ports:
       - "11211:11211"
+
+  whoami:
+    image: "containous/whoami"
+    container_name: "simple-service"
+    restart: unless-stopped
+    labels:
+      - traefik.http.routers.whoami.rule=Host(`whoami.localhost`)
+      - traefik.http.routers.whoami.tls=true
+      - traefik.http.routers.whoami.tls.certresolver=le
